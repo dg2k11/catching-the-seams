@@ -1,0 +1,35 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtual environments & packaging
+.venv/
+venv/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# Dataset & model artifacts (keep small sample/schema files only)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/gold_human_edits/*
+!data/gold_human_edits/.gitkeep
+data/case_study/*
+!data/case_study/.gitkeep
+checkpoints/
+outputs/
+*.parquet
+*.pt
+*.npz
+
+# OS / IDE / secrets
+.DS_Store
+.env
+*.local.yaml

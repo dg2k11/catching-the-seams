@@ -1,0 +1,11 @@
+numpy>=1.26
+pyyaml>=6.0
+datasets>=2.19
+pyarrow>=15.0
+tqdm>=4.66
+pytest>=8.0
+# Optional offline feature-extraction extras (frozen Gemma 3 1B, spaCy syntax, sentence embeddings):
+# spacy>=3.7
+# torch>=2.2
+# transformers>=4.44
+# sentence-transformers>=3.0
