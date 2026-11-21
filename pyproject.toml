@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "seam-detector"
 version = "0.1.0"
-description = "Catching the Seams: Explainable Line-Level AI Text Detection with Q-Learning (Stanford CS221 Autumn 2026)"
+description = "Line-level AI text detection using sequential seam features and linear Q-learning (Stanford CS221 Autumn 2026)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -18,9 +18,7 @@ authors = [
 dependencies = [
     "numpy>=1.26",
     "pyyaml>=6.0",
-    "datasets>=2.19",
     "pyarrow>=15.0",
-    "tqdm>=4.66",
 ]
 
 [project.optional-dependencies]
@@ -30,13 +28,6 @@ nlp = [
     "transformers>=4.44",
     "sentence-transformers>=3.0",
 ]
-dev = [
-    "pytest>=8.0",
-]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.pytest.ini_options]
-pythonpath = ["src"]
-testpaths = ["tests"]

@@ -1,23 +1,57 @@
-# Non-core scaffolding stub (AI-generated boilerplate; core implementation to be written by the student team per the CS221 Classroom Track policy).
-"""Sequential line-labeling MDP environment (Proposal Table 4)."""
+"""Sequential line-labeling MDP environment with step rewards and terminal Macro-F1 bonus."""
 
-from seam_detector.schema import Label, Passage
+from seam_detector.eval.metrics import compute_macro_f1
+from seam_detector.features.state_featurizer import build_state_vector
 
 
-class SeamDetectionMDP:
-    """Episode over passage s = (c_1, ..., c_n) with deterministic left-to-right transitions.
-
-    Rewards:
-      - Step reward r_t = +1 if a_t == y*_t else -1
-      - Terminal bonus r_{n+1} = MacroF1(y_hat_{1..n}, y*_{1..n})
-    """
-
-    def __init__(self, passage: Passage, discount: float = 1.0):
-        self.passage = passage
-        self.discount = discount
+class SeamEpisodeEnv:
+    def __init__(
+        self,
+        norm_phi,
+        norm_psi,
+        labels,
+        terminal_bonus_scale=2.0,
+        include_seam=True,
+        include_prev_label=True,
+    ):
+        self.norm_phi = norm_phi
+        self.norm_psi = norm_psi
+        self.labels = labels
+        self.n = len(labels)
+        self.terminal_bonus_scale = terminal_bonus_scale
+        self.include_seam = include_seam
+        self.include_prev_label = include_prev_label
+        self.t = 0
+        self.preds = []
 
     def reset(self):
-        raise NotImplementedError("TODO (Lead 3 — MDP & RL): initialize episode state s_1.")
+        self.t = 0
+        self.preds = []
+        return build_state_vector(
+            self.norm_phi[0],
+            self.norm_psi[0],
+            None,
+            0.0,
+            include_seam=self.include_seam,
+            include_prev_label=self.include_prev_label,
+        )
 
-    def step(self, action: Label):
-        raise NotImplementedError("TODO (Lead 3 — MDP & RL): advance to s_{t+1} and compute reward.")
+    def step(self, action):
+        y_true = self.labels[self.t]
+        reward = 1.0 if action == y_true else -1.0
+        self.preds.append(action)
+        self.t += 1
+        done = self.t >= self.n
+        if done:
+            f1_bonus = compute_macro_f1(self.labels, self.preds)
+            reward += self.terminal_bonus_scale * (f1_bonus - 0.5)
+            return None, reward, True
+        next_state = build_state_vector(
+            self.norm_phi[self.t],
+            self.norm_psi[self.t],
+            action,
+            self.t / self.n,
+            include_seam=self.include_seam,
+            include_prev_label=self.include_prev_label,
+        )
+        return next_state, reward, False

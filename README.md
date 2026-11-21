@@ -1,156 +1,73 @@
-# Catching the Seams: Explainable Line-Level AI Text Detection with Q-Learning
+# Catching the Seams
 
-**Stanford CS221 (Autumn 2026) Final Project — Classroom Track**  
+**Stanford CS221 (Autumn 2026) Final Project (Classroom Track)**  
 **Authors:** Deepti Gupta (`dgupta13`), Lingyin Wu (`lingyin`), Rohith Pamulasai (`r1021989`), Aditya Anand Bangalore (`adianand`)  
 **Proposal:** [`docs/proposal/Proposal_final_submitted.pdf`](docs/proposal/Proposal_final_submitted.pdf)
 
----
-
 ## Overview
 
-Real-world AI writing is frequently hybrid: an author drafts with an LLM and rewrites selected sentences, or inserts AI-polished sentences into human prose. Document-level detectors pool signal across the entire passage (letting human edits dilute remaining AI lines), while independent single-sentence classifiers struggle on short 10–25 token sentences.
+Mixed Human-AI text rarely sits purely at 0% or 100% synthetic prose: writers often draft with an LLM and revise selected sentences, or paste generated lines into human drafts. Document-level detectors average signal across whole articles, while single-sentence classifiers lose accuracy on short 10-to-25-word lines.
 
-**Key idea:** Human–AI editing leaves *seams*—abrupt sentence-to-sentence shifts in log-probability curvature, length, syntax depth, and style. We formulate line-by-line provenance tagging as a sequential Markov Decision Process (MDP) solved with linear function approximation (`Q-learning` and on-policy `SARSA`). Because $Q_w(s_t, a) = w_a^\top f(s_t)$ is linear, every line verdict $\hat{y}_t \in \{\text{Human}, \text{AI}\}$ decomposes exactly into additive feature contributions toward the margin $\Delta Q_t = Q_w(s_t, \text{AI}) - Q_w(s_t, \text{Human})$.
+Reading a passage left to right one sentence at a time lets the detector inspect three signals together at step $t$: 18 clues from line $t$ ($\phi(c_t)$), 5 seam jumps between line $t-1$ and line $t$ ($\psi(c_{t-1}, c_t)$), and the prior predicted label $\tilde{y}_{t-1}$. Linear weights $w \in \mathbb{R}^{2\times 32}$ produce an exact additive decision margin $\Delta Q_t = Q_w(s_t, \text{AI}) - Q_w(s_t, \text{Human})$ showing which features drove each line label.
 
-```text
-Passage s = (c_1, ..., c_n)
-   │
-   ▼  left-to-right at step t
-State s_t = (phi(c_t), psi(c_{t-1}, c_t), y_hat_{t-1}, t/n)
-   │
-   ▼  Linear Q-agent: Q_w(s_t, a) = w^T Phi(s_t, a),  a in {Human, AI}
-Verdict y_hat_t + exact top feature contributions to Delta Q_t
-```
+## Benchmark Construction
 
----
+Our M3 benchmark builds leak-free episodes from pre-generated static articles in the **Defactify Text Dataset** ([Roy et al., arXiv:2510.22874](https://arxiv.org/abs/2510.22874); [`Rajarshi-Roy-research/Defactify_Text_Dataset`](https://huggingface.co/datasets/Rajarshi-Roy-research/Defactify_Text_Dataset)), pairing New York Times human reporting with static articles from Gemma-2-9B, Mistral-7B, Qwen-2-72B, Llama-8B, Yi-Large, and GPT-4o (zero LLM inference is run during benchmark creation or training).
 
-## Source Dataset & Benchmark Construction
+- **Split isolation:** Training groups sharing sentences with validation or `test.parquet` are removed (`1,236` blocked groups), and remaining clean groups partition strictly by `story_group` into a `253`-article human bigram LM corpus, `Train` (`630` passages, `6,774` lines), and `Clean Held-Out Test` (`133` passages, `1,423` lines), alongside official `Validation` (`133` passages, `1,454` lines) and noisy `OOD Test` (`133` passages, `1,215` lines).
+- **Formatting hygiene:** Strips markdown headers, section tags (`Climate|Headline`), tracker chrome, and repairs fused scrape punctuation (`book.Learn -> book. Learn`).
+- **Passage lengths:** All episodes run `6` to `14` sentences (`150` to `392` words), with `0` cross-split sentence overlap.
 
-We ground our benchmark in the **Defactify Text Dataset** ([Roy et al., arXiv:2510.22874](https://arxiv.org/abs/2510.22874); [`Rajarshi-Roy-research/Defactify_Text_Dataset`](https://huggingface.co/datasets/Rajarshi-Roy-research/Defactify_Text_Dataset)):
-
-| Split | Total Articles | `Human_story` (NYT) | Per-LLM Count (`Gemma-2-9B`, `Mistral-7B`, `Qwen-2-72B`, `LLaMA-8B`, `Yi-Large`, `GPT-4o`) |
-| :--- | ---: | ---: | ---: |
-| `train` | 51,247 | 7,321 | 7,321 each |
-| `validation` | 10,983 | 1,569 | 1,569 each |
-| `test` | 10,963 | 1,558 | 1,565–1,569 each |
-| **Total** | **73,193** | **10,448** | **10,455–10,459 each** |
-
-Each record provides `Text`, `Label_A` (`0` = Human, `1` = AI), and `Label_B` (`Human_story` or source LLM). Because raw Defactify rows are whole articles, our benchmark pipeline constructs line-level provenance episodes of $n \in [6, 20]$ sentences (150–400 words) while preserving split boundaries:
-
-1. **`Slice H` (Pure Human Passages, ~200 passages):** Sampled from `Human_story` (`Label_A = 0`) to measure false-positive rates on unedited human writing.
-2. **`Slice E(k)` (Hybrid Seam Passages, ~400 passages across $k \in \{0, 25, 50, 75\}\%$):** Sampled from `Label_A = 1` LLM articles where $k\%$ of sentences are rewritten (by team members for a ~60-passage gold subset in `data/gold_human_edits/` and by controlled voice-rewrite passes for the remaining benchmark), recording exact sentence-level edit logs $y^*_{1..n}$.
-3. **Held-Out Case Study (`data/case_study/`):** Qualitative line-by-line evaluation on contested literary prose (*The Serpent in the Grove*).
-
----
-
-## Repository Layout & Team Leads
-
-The repository mirrors the four-lead division in Proposal Appendix A.3:
+## Repository Layout
 
 ```text
 catching-the-seams/
-├── configs/default.yaml                     # Dataset, feature, MDP, and RL hyperparameters
+├── configs/default.yaml                  # Shared dataset, feature, baseline, and RL hyperparameters
 ├── docs/proposal/Proposal_final_submitted.pdf
 ├── scripts/
-│   ├── build_benchmark.py                   # Step 1: Download Defactify & build Slice H / Slice E(k)
-│   ├── extract_features.py                  # Step 2: Offline Gemma 3 1B curvature + phi / psi cache
-│   ├── run_baselines.py                     # Step 3: B1 (Fast-DetectGPT), B2 (Gemini), B3 (LogReg), Oracle
-│   ├── train_rl.py                          # Step 4: Linear Q-learning & SARSA training on CPU
-│   └── evaluate.py                          # Step 5: E1 robustness, E2 state ablation, E3 faithfulness
+│   ├── build_benchmark.py                # Step 1: Clean Defactify Parquet splits into Slice H / E(k)
+│   ├── extract_features.py               # Step 2: Fit ReferenceBigramLM and cache standardized features
+│   ├── run_baselines.py                  # Step 3: Fit Baseline B1 and Baseline B3
+│   ├── train_rl.py                       # Step 4: Train Linear Q-learning, SARSA, and E2 ablations
+│   └── evaluate.py                       # Step 5: Compute E1, E2, E3, OOD metrics, and walkthrough
 ├── src/seam_detector/
-│   ├── schema.py                            # Passage, LineRecord, and LinePrediction dataclasses
-│   ├── data/                                # Lead 1 (Benchmark): Defactify loader & Slice H / E(k) builder
-│   ├── features/                            # Lead 2 (Features): phi(c_t), psi(c_{t-1}, c_t), Phi(s_t, a)
-│   ├── baselines/                           # Lead 2 (Baselines): B1, B2, B3, and Edit-Log Oracle
-│   ├── rl/                                  # Lead 3 (MDP & RL): Sequential env, Q-learning, SARSA
-│   └── eval/                                # Lead 4 (Eval & XAI): Macro-F1, FPR, faithfulness, explanations
-└── tests/
-    └── test_smoke.py                        # Package import and schema smoke tests
+│   ├── schema.py                         # Label, LineRecord, Passage, LinePrediction dataclasses
+│   ├── config_util.py                    # YAML config loader
+│   ├── data/                             # Defactify Parquet cleaner and Slice H / E(k) builder
+│   ├── features/                         # phi(c_t), psi(c_{t-1}, c_t), and 32-dim state featurizer
+│   ├── baselines/                        # B1 smoothness proxy, B3 SGD logistic regression, and oracle bounds
+│   ├── rl/                               # Sequential MDP environment, Q-learning, and SARSA agents
+│   └── eval/                             # Macro-F1, Slice H FPR, AI-share MAE, and faithfulness flip checks
+└── tests/test_smoke.py                   # Unit tests across schema, cleaning, features, MDP, RL, and metrics
 ```
 
----
+## Running the Pipeline and Tests
 
-## Setup & How to Run
-
-### 1. Environment Setup
-
-Using `uv` (recommended) or `pip` with Python 3.10+:
+Run the unit tests with Python's standard library runner:
 
 ```bash
-git clone https://github.com/dg2k11/catching-the-seams.git
-cd catching-the-seams
-
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
-Install optional local NLP / reference-LM dependencies when running offline feature extraction:
+Run all five CPU stages end-to-end (`configs/default.yaml` sets default paths and hyperparameters):
 
 ```bash
-pip install -e ".[nlp]"
-python3 -m spacy download en_core_web_sm
+PYTHONPATH=src python3 scripts/build_benchmark.py --config configs/default.yaml
+PYTHONPATH=src python3 scripts/extract_features.py --config configs/default.yaml
+PYTHONPATH=src python3 scripts/run_baselines.py --config configs/default.yaml
+PYTHONPATH=src python3 scripts/train_rl.py --config configs/default.yaml
+PYTHONPATH=src python3 scripts/evaluate.py --config configs/default.yaml
 ```
 
-### 2. Pipeline Commands
+Override `--parquet-dir`, `--data-dir`, `--ckpt-dir`, or `--out-dir` explicitly when pointing at custom folders.
 
-Once each module's implementation is completed, run the end-to-end workflow with:
+## CS221 Classroom Track AI-Use Disclosure
 
-```bash
-# 1. Stream/download Defactify splits and construct Slice H + Slice E(k)
-python3 scripts/build_benchmark.py --config configs/default.yaml
+Per the [CS221 Classroom Track AI Policy](https://stanford-cs221.github.io/autumn2026/project-classroom.html), students must review and own all core code before milestone submission:
 
-# 2. Compute offline per-line features phi(c_t) and seam shifts psi(c_{t-1}, c_t)
-python3 scripts/extract_features.py --config configs/default.yaml
-
-# 3. Evaluate B1 (Fast-DetectGPT), B2 (Gemini zero-shot), B3 (per-line LogReg), and Oracle
-python3 scripts/run_baselines.py --config configs/default.yaml
-
-# 4. Train linear Q-learning and SARSA agents in NumPy on CPU
-python3 scripts/train_rl.py --config configs/default.yaml --algorithm q_learning
-python3 scripts/train_rl.py --config configs/default.yaml --algorithm sarsa
-
-# 5. Run E1 (edit-rate robustness), E2 (state ablation), and E3 (explanation faithfulness)
-python3 scripts/evaluate.py --config configs/default.yaml
-```
-
-Run tests with:
-
-```bash
-pytest
-```
-
----
-
-## Code Authorship & AI-Use Provenance (CS221 Classroom Track)
-
-Per the [CS221 Classroom Track AI Policy](https://stanford-cs221.github.io/autumn2026/project-classroom.html) and Project Guidelines, all core algorithmic, dataset-construction, feature-extraction, baseline, RL, and evaluation logic should be written by the four student authors. The table below tracks file-level provenance across the repository and should be updated at each milestone (`progress.pdf` and `final.pdf`):
-
-| Path / Module | Provenance Status | Notes |
-| :--- | :--- | :--- |
-| `README.md`, `pyproject.toml`, `requirements.txt`, `.gitignore`, `LICENSE`, `configs/default.yaml` | AI-scaffolded boilerplate (non-core) | Initial project structure, config template, and documentation; reviewed and maintained by student authors |
-| `src/seam_detector/schema.py`, `tests/test_smoke.py`, `scripts/*.py` (CLI arg parsing & stubs) | AI-scaffolded boilerplate (non-core) | Data structures and empty CLI entrypoints (`NotImplementedError` placeholders; zero core algorithm code) |
-| `src/seam_detector/data/*` | **Human-written (core — in progress)** | Defactify passage segmentation, `Slice H` / `Slice E(k)` construction, and gold human-edit pipeline |
-| `src/seam_detector/features/*` | **Human-written (core — in progress)** | Offline `Gemma 3 1B` curvature/log-prob pass, linguistic/rhetorical features $\phi(c_t)$, seam shifts $\psi(c_{t-1}, c_t)$ |
-| `src/seam_detector/baselines/*` | **Human-written (core — in progress)** | `B1` Fast-DetectGPT threshold, `B2` zero-shot LLM baseline, `B3` SGD logistic regression, and Oracle bounds |
-| `src/seam_detector/rl/*` | **Human-written (core — in progress)** | Sequential provenance MDP, $\epsilon$-greedy linear Q-learning, on-policy SARSA, and heuristic policy evaluation |
-| `src/seam_detector/eval/*` | **Human-written (core — in progress)** | Pooled line-level Macro-F1, `Slice H` FPR, passage AI-share error, `E1`–`E3` ablations, and linear explanation renderer |
-| `docs/proposal/Proposal_final_submitted.pdf` | **Human-written** | Authored by the four students (LaTeX/TikZ formatting disclosed in Proposal Table 5) |
-
----
-
-## Citation
-
-If referencing the underlying source dataset, cite:
-
-```bibtex
-@misc{roy2026comprehensivedatasethumanvs,
-  title         = {A Comprehensive Dataset for Human vs. AI Generated Text Detection},
-  author        = {Rajarshi Roy and Gurpreet Singh and Ashhar Aziz and Shashwat Bajpai and Nasrin Imanpour and Shwetangshu Biswas and Kapil Wanaskar and Parth Patwa and Subhankar Ghosh and Shreyas Dixit and Nilesh Ranjan Pal and Vipula Rawte and Ritvik Garimella and Gaytri Jena and Amitava Das and Amit Sheth and Vasu Sharma and Aishwarya Naresh Reganti and Vinija Jain and Aman Chadha},
-  year          = {2026},
-  eprint        = {2510.22874},
-  archivePrefix = {arXiv},
-  primaryClass  = {cs.CL},
-  url           = {https://arxiv.org/abs/2510.22874}
-}
-```
+| Area | Role and Student Verification |
+| :--- | :--- |
+| Packaging & CLI starter files | Repository layout, YAML config loader, `pyproject.toml`, and CLI argument parsing generated during setup and reviewed by the team. |
+| Benchmark hygiene & visualization | Parquet error checks, cleaning regexes, and result plotting scripts audited against processed JSON summaries on CPU. |
+| Core detection & RL algorithms | Feature extraction (`phi`, `psi`), logistic baseline, MDP rewards, Q-learning/SARSA updates, and E1/E3 metrics reviewed line by line and tested by the four authors before submission. |
+| Milestone M4 roadmap | Gemini zero-shot baseline (`B2` in `baselines/gemini_zeroshot.py`), frozen Gemma 3 1B features, and gold human-edit evaluation remain next milestones. |

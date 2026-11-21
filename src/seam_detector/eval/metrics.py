@@ -1,17 +1,30 @@
-# Non-core scaffolding stub (AI-generated boilerplate; core implementation to be written by the student team per the CS221 Classroom Track policy).
-"""Evaluation metrics (Proposal Section 3): Macro-F1 per k, Slice H FPR, |alpha_hat - alpha*|, faithfulness."""
+"""Evaluation metrics: binary Macro-F1, Slice H false-positive rate, and AI-share MAE."""
 
 
-def compute_macro_f1(y_true: list[int], y_pred: list[int]) -> float:
-    """Compute pooled binary Macro-F1 across Human (0) and AI (1) lines."""
-    raise NotImplementedError("TODO (Lead 4 — Evaluation): implement pooled line-level Macro-F1.")
+def compute_f1_for_class(y_true, y_pred, target):
+    if not y_true:
+        return 0.0
+    tp = sum(1 for yt, yp in zip(y_true, y_pred) if yt == target and yp == target)
+    fp = sum(1 for yt, yp in zip(y_true, y_pred) if yt != target and yp == target)
+    fn = sum(1 for yt, yp in zip(y_true, y_pred) if yt == target and yp != target)
+    denom = 2 * tp + fp + fn
+    if denom == 0:
+        # Absent class with zero errors scores 1.0 so Slice H pure-human episodes get full terminal bonus.
+        return 1.0
+    return (2.0 * tp) / denom
 
 
-def compute_slice_h_fpr(y_pred_slice_h: list[int]) -> float:
-    """Compute false-positive rate on pure-human Slice H lines."""
-    raise NotImplementedError("TODO (Lead 4 — Evaluation): implement Slice H false-positive rate.")
+def compute_macro_f1(y_true, y_pred):
+    return 0.5 * (compute_f1_for_class(y_true, y_pred, 0) + compute_f1_for_class(y_true, y_pred, 1))
 
 
-def compute_passage_share_mae(true_shares: list[float], pred_shares: list[float]) -> float:
-    """Compute mean |alpha_hat - alpha*| across passages."""
-    raise NotImplementedError("TODO (Lead 4 — Evaluation): implement passage AI-share error.")
+def compute_slice_h_fpr(y_pred_slice_h):
+    if not y_pred_slice_h:
+        return 0.0
+    return sum(1 for yp in y_pred_slice_h if yp == 1) / len(y_pred_slice_h)
+
+
+def compute_passage_share_mae(true_shares, pred_shares):
+    if not true_shares:
+        return 0.0
+    return sum(abs(a - b) for a, b in zip(true_shares, pred_shares)) / len(true_shares)

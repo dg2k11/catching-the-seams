@@ -1,43 +1,47 @@
-# Configuration for Catching the Seams (Stanford CS221 Autumn 2026, Classroom Track)
+# Configuration for Catching the Seams (Stanford CS221 Autumn 2026)
 
 seed: 221
+
+paths:
+  parquet_dir: "/tmp/defactify_parquet"
+  processed_dir: "data/processed"
+  checkpoint_dir: "checkpoints"
+  output_dir: "outputs"
 
 dataset:
   hf_repo: "Rajarshi-Roy-research/Defactify_Text_Dataset"
   arxiv_id: "2510.22874"
-  text_column: "Text"
-  binary_label_column: "Label_A"      # 0 = Human, 1 = AI
-  source_label_column: "Label_B"      # Human_story, Gemma-2-9B, Mistral-7B, Qwen-2-72B, LLaMA-8B, Yi-Large, GPT-4o
   min_sentences: 6
-  max_sentences: 20
+  max_sentences: 16
   min_words: 150
   max_words: 400
-  slice_h_passages: 200
-  slice_ek_passages: 400
-  gold_human_edit_passages: 60
-  edit_rates: [0, 25, 50, 75]         # percentage k of rewritten sentences
-  split_ratios:
-    train: 0.70
-    validation: 0.15
-    test: 0.15
+  train_slice_h: 210
+  train_per_k: 105
+  eval_slice_h: 45
+  eval_per_k: 22
+  edit_rates: [0, 25, 50, 75]
 
 features:
-  reference_lm: "google/gemma-3-1b-pt"
-  spacy_model: "en_core_web_sm"
-  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
-  num_line_features: 20               # phi(c_t)
-  num_seam_features: 5                # psi(c_{t-1}, c_t)
+  reference_lm: "ReferenceBigramLM"
+  num_line_features: 18
+  num_seam_features: 5
+  state_dim: 32
 
 mdp:
   actions: ["Human", "AI"]
   step_reward_correct: 1.0
   step_reward_incorrect: -1.0
-  use_terminal_macro_f1_bonus: true
+  terminal_bonus_scale: 2.0
   discount_candidates: [0.9, 1.0]
 
+baselines:
+  b3_lr: 0.06
+  b3_epochs: 40
+  b3_l2: 0.001
+
 training:
-  algorithm: "q_learning"             # q_learning | sarsa | policy_eval
-  num_epochs: 25
-  learning_rate: 0.01
+  num_epochs: 30
+  learning_rate: 0.006
+  l2: 0.0001
   epsilon_start: 0.30
   epsilon_end: 0.05

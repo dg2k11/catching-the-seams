@@ -1,9 +1,7 @@
-# Non-core scaffolding stub (AI-generated boilerplate; core implementation to be written by the student team per the CS221 Classroom Track policy).
-"""Baseline B2: Zero-shot Gemini line-by-line provenance prompting (evaluation only)."""
-
-from seam_detector.schema import Label, Passage
+"""Baseline B2: zero-shot Gemini sentence-level baseline reserved for Milestone M4."""
 
 
-def predict_passage_zeroshot(passage: Passage, model_name: str = "gemini-2.5-flash") -> list[Label]:
-    """Prompt an LLM zero-shot to tag each sentence in a passage as Human or AI."""
-    raise NotImplementedError("TODO (Lead 2 — Baselines): implement zero-shot line tagging baseline B2.")
+def predict_passage_zeroshot(sentences, model_name="gemini-2.5-flash"):
+    raise RuntimeError(
+        f"Baseline B2 ({model_name}) requires an external Gemini client and is scheduled for M4."
+    )

@@ -1,24 +1,13 @@
-# Non-core scaffolding stub (AI-generated boilerplate; core implementation to be written by the student team per the CS221 Classroom Track policy).
-"""On-policy linear SARSA and fixed-heuristic policy evaluation (Proposal Section 4)."""
+"""On-policy linear SARSA agent reusing shared linear action-value storage."""
 
-import numpy as np
+from seam_detector.rl.q_learning import LinearRLAgent
 
 
-class LinearSarsaAgent:
-    """On-policy linear SARSA comparator for sequential provenance tagging."""
-
-    def __init__(self, state_dim: int, lr: float = 0.01, discount: float = 1.0):
-        self.state_dim = state_dim
-        self.lr = lr
-        self.discount = discount
-        self.weights = np.zeros(2 * state_dim, dtype=np.float64)
-
-    def update(
-        self,
-        state_vec: np.ndarray,
-        action: int,
-        reward: float,
-        next_state_vec: np.ndarray | None,
-        next_action: int | None,
-    ) -> float:
-        raise NotImplementedError("TODO (Lead 3 — MDP & RL): implement on-policy linear SARSA update.")
+class LinearSarsaAgent(LinearRLAgent):
+    def update_sarsa(self, state_vec, action, reward, next_state_vec, next_action, step_lr=None):
+        lr = self.lr if step_lr is None else step_lr
+        if next_state_vec is None or next_action is None:
+            target = reward
+        else:
+            target = reward + self.discount * float(self.w[next_action] @ next_state_vec)
+        return self._td_update(state_vec, action, target, lr)

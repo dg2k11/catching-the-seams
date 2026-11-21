@@ -1,5 +1,4 @@
-# Non-core scaffolding stub (AI-generated boilerplate; core implementation to be written by the student team per the CS221 Classroom Track policy).
-"""Catching the Seams: Sequential MDP & Linear Q-Learning for Line-Level AI Text Detection."""
+"""Catching the Seams: line-level AI text detection with linear Q-learning."""
 
 from seam_detector.schema import Label, LinePrediction, LineRecord, Passage
 

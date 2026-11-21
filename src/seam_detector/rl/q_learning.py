@@ -1,21 +1,36 @@
-# Non-core scaffolding stub (AI-generated boilerplate; core implementation to be written by the student team per the CS221 Classroom Track policy).
-"""Epsilon-greedy Q-learning with linear function approximation (Proposal Section 4, Eq. 1)."""
+"""Linear Q-learning agent with shared linear TD update helper."""
 
 import numpy as np
 
 
-class LinearQLearningAgent:
-    """Linear Q-agent Q_w(s, a) = w^T Phi(s, a) trained on CPU in NumPy."""
-
-    def __init__(self, state_dim: int, lr: float = 0.01, discount: float = 1.0):
+class LinearRLAgent:
+    def __init__(self, state_dim, lr=0.006, discount=0.9, l2=1e-4, seed=221):
         self.state_dim = state_dim
         self.lr = lr
         self.discount = discount
-        self.weights = np.zeros(2 * state_dim, dtype=np.float64)
+        self.l2 = l2
+        self.rng = np.random.default_rng(seed)
+        self.w = np.zeros((2, state_dim), dtype=np.float64)
 
-    def act(self, state_vec: np.ndarray, epsilon: float = 0.0) -> int:
-        raise NotImplementedError("TODO (Lead 3 — MDP & RL): implement epsilon-greedy action selection.")
+    def q_values(self, state_vec):
+        return self.w @ state_vec
 
-    def update(self, state_vec: np.ndarray, action: int, reward: float, next_state_vec: np.ndarray | None) -> float:
-        """Apply w <- w - eta * [Q_w(s, a) - (r + gamma * max_{a'} Q_w(s', a'))] * Phi(s, a)."""
-        raise NotImplementedError("TODO (Lead 3 — MDP & RL): implement linear Q-learning TD update.")
+    def act(self, state_vec, epsilon=0.0):
+        if epsilon > 0.0 and self.rng.random() < epsilon:
+            return int(self.rng.integers(0, 2))
+        q = self.q_values(state_vec)
+        return 1 if q[1] >= q[0] else 0
+
+    def _td_update(self, state_vec, action, target, step_lr):
+        q_sa = float(self.w[action] @ state_vec)
+        td_err = float(np.clip(q_sa - target, -5.0, 5.0))
+        self.w[action] -= step_lr * (td_err * state_vec + self.l2 * self.w[action])
+        return td_err
+
+    def update(self, state_vec, action, reward, next_state_vec, step_lr=None):
+        lr = self.lr if step_lr is None else step_lr
+        if next_state_vec is None:
+            target = reward
+        else:
+            target = reward + self.discount * float(np.max(self.q_values(next_state_vec)))
+        return self._td_update(state_vec, action, target, lr)
